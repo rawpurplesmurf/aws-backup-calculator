@@ -255,20 +255,3 @@ The API returns a JSON response with monthly cost projections for the next 12 mo
   ]
 }
 ```
-
-## Security Considerations
-
-This API doesn't include authentication or rate limiting. For production deployment, consider:
-- Adding authentication
-- Implementing rate limiting
-- Using HTTPS
-- Setting up proper firewall rules
-- Implementing input validation and sanitization
-
-## License
-
-[Add your license information here]
-
-## Contributing
-
-[Add contribution guidelines here]
