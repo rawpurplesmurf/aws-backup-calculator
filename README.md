@@ -117,25 +117,114 @@ Upload a CSV file with the following headers:
 
 ### Using curl
 
+#### Single Resource Calculation
 ```bash
 # Single resource calculation
 curl -X POST "http://127.0.0.1:8000/calculate" \
 -H "Content-Type: application/json" \
 -d '{"type": "EBS", "size_gb": 100, "job": "daily"}'
-
-# CSV file upload
-curl -X POST "http://127.0.0.1:8000/calculate_csv" \
--F "file=@resources.csv"
 ```
 
-### Sample CSV Format
+#### CSV Bulk Calculation
+First, create a file named `backup_resources.csv` with the following content:
 
 ```csv
 type,size_gb,job
-EBS,100,daily
-EFS,500,weekly
-RDS,1000,monthly_180
+EBS,100,weekly
+RDS,500,intraday
+EFS,10000,monthly_180
 ```
+
+This sample file includes:
+1. A 100GB EBS volume with weekly backups (90-day retention)
+2. A 500GB RDS instance with backups every 4 hours (7-day retention)
+3. A 10000GB EFS volume with monthly backups (180-day retention)
+
+Then run the calculation:
+```bash
+curl -X POST "http://127.0.0.1:8000/calculate_csv" \
+-F "file=@backup_resources.csv"
+```
+
+#### Sample Response
+The API will return a JSON response with cost projections for each resource. Here's a simplified example of what the response structure looks like:
+
+```json
+[
+  {
+    "resource": {
+      "type": "EBS",
+      "size_gb": 100,
+      "job": "weekly"
+    },
+    "monthly_costs": [
+      {
+        "month": 1,
+        "cost": 2.75,
+        "breakdown": {
+          "weekly": 2.75
+        }
+      },
+      // ... remaining months
+    ]
+  },
+  {
+    "resource": {
+      "type": "RDS",
+      "size_gb": 500,
+      "job": "intraday"
+    },
+    "monthly_costs": [
+      {
+        "month": 1,
+        "cost": 47.5,
+        "breakdown": {
+          "intraday": 47.5
+        }
+      },
+      // ... remaining months
+    ]
+  },
+  {
+    "resource": {
+      "type": "EFS",
+      "size_gb": 10000,
+      "job": "monthly_180"
+    },
+    "monthly_costs": [
+      {
+        "month": 1,
+        "cost": 450.0,
+        "breakdown": {
+          "monthly_180": 450.0
+        }
+      },
+      // ... remaining months
+    ]
+  }
+]
+```
+
+### Understanding the Results
+
+For each resource in the CSV file, the calculator considers:
+
+1. **EBS Volume (100GB, weekly)**
+   - Weekly snapshots with 90-day retention
+   - Transitions to cold storage after 5 days
+   - Uses both warm ($0.05/GB-month) and cold ($0.0125/GB-month) storage
+
+2. **RDS Instance (500GB, intraday)**
+   - Backups every 4 hours with 7-day retention
+   - No cold storage support
+   - Uses only warm storage ($0.095/GB-month)
+
+3. **EFS Volume (10000GB, monthly_180)**
+   - Monthly backups with 180-day retention
+   - Transitions to cold storage after 5 days
+   - Uses both warm ($0.05/GB-month) and cold ($0.01/GB-month) storage
+
+The response includes a 12-month projection for each resource, with costs broken down by backup schedule and storage tier.
 
 ## API Documentation
 
