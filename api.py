@@ -41,6 +41,8 @@ class CostResponse(BaseModel):
 
 
 def calculate_monthly_costs(resource_type: str, size_gb: float, job_name: Optional[str] = None):
+    print(f"\nCalculating costs for {resource_type} ({size_gb}GB) with {job_name} schedule...")
+    
     if resource_type not in PRICE_MAP:
         raise ValueError(f"Unsupported resource type: {resource_type}")
     warm_price = PRICE_MAP[resource_type]['warm']
@@ -56,6 +58,7 @@ def calculate_monthly_costs(resource_type: str, size_gb: float, job_name: Option
 
     # Simulate each of the next 12 months
     for month_index in range(1, 13):
+        print(f"\nProcessing month {month_index}/12...")
         month_start = start_date + relativedelta(months=month_index-1)
         month_end = month_start + relativedelta(months=1)
         days_in_month = (month_end - month_start).days
@@ -64,14 +67,18 @@ def calculate_monthly_costs(resource_type: str, size_gb: float, job_name: Option
         breakdown = {}
 
         for sched in schedules_to_use:
+            print(f"  Processing {sched['name']} schedule...")
             sched_cost = 0.0
             rp_time = start_date
+            backup_points = 0
+            
             # Move to first recovery point in or after month_start
             while rp_time < month_start:
                 rp_time += sched['interval']
             
             # Iterate recovery points within the month
             while rp_time < month_end:
+                backup_points += 1
                 # Calculate warm days
                 warm_end = min(
                     rp_time + (sched['cold_after'] or sched['retention']),
@@ -95,11 +102,14 @@ def calculate_monthly_costs(resource_type: str, size_gb: float, job_name: Option
 
                 rp_time += sched['interval']
 
+            print(f"    Processed {backup_points} backup points for {sched['name']}")
             breakdown[sched['name']] = round(sched_cost, 6)
             month_cost += sched_cost
 
         results.append(MonthlyCostItem(month=month_index, cost=round(month_cost, 6), breakdown=breakdown))
+        print(f"  Month {month_index} total cost: ${round(month_cost, 2)}")
 
+    print("\nCalculation complete!")
     return results
 
 
@@ -114,21 +124,35 @@ async def calculate_cost_json(resource: Resource):
 
 @app.post("/calculate_csv", response_model=List[CostResponse])
 async def calculate_cost_csv(file: UploadFile = File(...)):
+    print("Received request")  # Debug log
+    
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
+    
+    print(f"Reading file: {file.filename}")  # Debug log
     content = await file.read()
+    print("File read complete")  # Debug log
+    
     decoded = content.decode('utf-8')
+    print("File decoded")  # Debug log
+    
     reader = csv.DictReader(StringIO(decoded))
     responses = []
+    
+    print("Processing CSV rows")  # Debug log
     for row in reader:
         rt = row.get('type')
         size = float(row.get('size_gb', 0))
         job = row.get('job') or None
+        print(f"Processing row: type={rt}, size={size}, job={job}")  # Debug log
+        
         try:
             costs = calculate_monthly_costs(rt, size, job)
+            responses.append(CostResponse(resource=Resource(type=rt, size_gb=size, job=job), monthly_costs=costs))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        responses.append(CostResponse(resource=Resource(type=rt, size_gb=size, job=job), monthly_costs=costs))
+    
+    print("Processing complete")  # Debug log
     return responses
 
 # To run: uvicorn app:app --reload
