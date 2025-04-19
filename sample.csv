@@ -1,0 +1,4 @@
+type,size_gb,job
+EBS,100,weekly
+RDS,500,intraday
+EFS,10000,monthly_180
