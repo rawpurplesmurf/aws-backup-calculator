@@ -114,21 +114,35 @@ async def calculate_cost_json(resource: Resource):
 
 @app.post("/calculate_csv", response_model=List[CostResponse])
 async def calculate_cost_csv(file: UploadFile = File(...)):
+    print("Received request")  # Debug log
+    
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
+    
+    print(f"Reading file: {file.filename}")  # Debug log
     content = await file.read()
+    print("File read complete")  # Debug log
+    
     decoded = content.decode('utf-8')
+    print("File decoded")  # Debug log
+    
     reader = csv.DictReader(StringIO(decoded))
     responses = []
+    
+    print("Processing CSV rows")  # Debug log
     for row in reader:
         rt = row.get('type')
         size = float(row.get('size_gb', 0))
         job = row.get('job') or None
+        print(f"Processing row: type={rt}, size={size}, job={job}")  # Debug log
+        
         try:
             costs = calculate_monthly_costs(rt, size, job)
+            responses.append(CostResponse(resource=Resource(type=rt, size_gb=size, job=job), monthly_costs=costs))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        responses.append(CostResponse(resource=Resource(type=rt, size_gb=size, job=job), monthly_costs=costs))
+    
+    print("Processing complete")  # Debug log
     return responses
 
 # To run: uvicorn app:app --reload
