@@ -5,6 +5,14 @@ import csv
 from io import StringIO
 from datetime import date, datetime, timedelta
 from dateutil.relativedelta import relativedelta
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -161,44 +169,49 @@ def calculate_monthly_costs(resource_type: str, size_gb: float, job_name: Option
 
 @app.post("/calculate", response_model=CostResponse)
 async def calculate_cost_json(resource: Resource):
+    logger.info(f"Received calculation request for resource: {resource}")
     try:
         costs = calculate_monthly_costs(resource.type, resource.size_gb, resource.job)
+        logger.info(f"Successfully calculated costs for {resource.type} ({resource.size_gb}GB)")
     except ValueError as e:
+        logger.error(f"Error calculating costs: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
     return CostResponse(resource=resource, monthly_costs=costs)
 
 
 @app.post("/calculate_csv", response_model=List[CostResponse])
 async def calculate_cost_csv(file: UploadFile = File(...)):
-    print("Received request")  # Debug log
+    logger.info(f"Received CSV calculation request for file: {file.filename}")
     
     if not file.filename.endswith('.csv'):
+        logger.error(f"Invalid file type: {file.filename}")
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
     
-    print(f"Reading file: {file.filename}")  # Debug log
+    logger.info("Reading CSV file content")
     content = await file.read()
-    print("File read complete")  # Debug log
     
     decoded = content.decode('utf-8')
-    print("File decoded")  # Debug log
+    logger.info("CSV file decoded successfully")
     
     reader = csv.DictReader(StringIO(decoded))
     responses = []
     
-    print("Processing CSV rows")  # Debug log
+    logger.info("Processing CSV rows")
     for row in reader:
         rt = row.get('type')
         size = float(row.get('size_gb', 0))
         job = row.get('job') or None
-        print(f"Processing row: type={rt}, size={size}, job={job}")  # Debug log
+        logger.info(f"Processing row: type={rt}, size={size}, job={job}")
         
         try:
             costs = calculate_monthly_costs(rt, size, job)
             responses.append(CostResponse(resource=Resource(type=rt, size_gb=size, job=job), monthly_costs=costs))
+            logger.info(f"Successfully calculated costs for {rt} ({size}GB)")
         except ValueError as e:
+            logger.error(f"Error processing row: {str(e)}")
             raise HTTPException(status_code=400, detail=str(e))
     
-    print("Processing complete")  # Debug log
+    logger.info(f"Successfully processed {len(responses)} resources from CSV")
     return responses
 
 # To run: uvicorn app:app --reload
