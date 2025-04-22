@@ -1,8 +1,5 @@
 # AWS Backup Calculator API
 
-I needed this after coming across 39,000 ebs snapshots in an account, math is hard, especially with a lot of data, this is prety much all the work of AI, started with chatGPT and refined in cursor. 
-
-
 A FastAPI-based calculator for estimating AWS backup costs across different storage types and backup schedules. This tool helps you estimate the costs of backing up your AWS resources (EBS, EFS, and RDS) with various backup schedules and retention policies.
 
 ## Features
@@ -395,26 +392,147 @@ snap-1234567890abcdef0: 45.23% (12345 blocks, 6,321,254,400 bytes of 13,980,000,
 3. Calculates the percentage of the source volume that is actually stored
 4. Provides detailed statistics about the snapshot's storage usage
 
-## Response Format
+### EC2 EBS Volume Discovery Tool
 
-The API returns a JSON response with monthly cost projections for the next 12 months:
+The `list_ec2_ebs_volumes_by_tag.py` script helps discover EBS volumes attached to EC2 instances based on instance tags. This is useful for generating input for the backup cost calculator.
 
+#### Usage
+
+```bash
+python list_ec2_ebs_volumes_by_tag.py [--tag-key TAG_KEY] [--output OUTPUT_FILE]
+```
+
+Example:
+```bash
+python list_ec2_ebs_volumes_by_tag.py --tag-key backup_schedule --output volumes.csv
+```
+
+#### Features
+- Discovers EBS volumes attached to EC2 instances
+- Filters instances by tag key
+- Extracts volume sizes and tag values
+- Generates CSV output compatible with the backup calculator
+- Provides detailed logging of the discovery process
+
+#### Output Format
+The script generates a CSV file with the following columns:
+- `type`: Always "EBS"
+- `size_gb`: Volume size in gigabytes
+- `ec2_tag_value`: The value of the specified tag on the EC2 instance
+
+Example output:
+```csv
+type,size_gb,ec2_tag_value
+EBS,100,daily
+EBS,500,weekly
+EBS,1000,monthly
+```
+
+#### How it Works
+1. Searches for EC2 instances with the specified tag key
+2. For each matching instance:
+   - Extracts the tag value
+   - Identifies attached EBS volumes
+   - Retrieves volume sizes
+3. Generates a CSV file with the collected information
+4. Provides detailed logging of the discovery process
+
+#### Logging
+The script provides detailed logging output showing:
+- Instance discovery progress
+- Volume processing status
+- Error conditions
+- Final results summary
+
+Example log output:
+```
+2024-04-22 20:15:30,123 - INFO - Starting EBS volume discovery with tag key: backup_schedule
+2024-04-22 20:15:30,456 - INFO - Processing instance: i-1234567890abcdef0
+2024-04-22 20:15:30,789 - INFO - Found tag value 'daily' for instance i-1234567890abcdef0
+2024-04-22 20:15:31,012 - INFO - Processing volume vol-1234567890abcdef0 for instance i-1234567890abcdef0
+2024-04-22 20:15:31,345 - INFO - Volume vol-1234567890abcdef0 size: 100GB
+...
+2024-04-22 20:15:32,678 - INFO - Successfully wrote 3 rows to volumes.csv
+```
+
+### Volume Snapshot Discovery Tool
+
+The `list_volume_snapshots.py` script lists all snapshots associated with a given EBS volume. This is useful for auditing and managing snapshots.
+
+#### Usage
+
+```bash
+python list_volume_snapshots.py VOLUME_ID [--region REGION] [--output FORMAT]
+```
+
+Example:
+```bash
+python list_volume_snapshots.py vol-1234567890abcdef0 --region us-west-2 --output table
+```
+
+#### Features
+- Lists all snapshots for a specified EBS volume
+- Supports multiple AWS regions
+- Provides detailed snapshot information including:
+  - Snapshot ID
+  - Creation time
+  - State
+  - Progress
+  - Volume size
+  - Description
+- Output in both table and JSON formats
+- Comprehensive logging
+
+#### Output Formats
+
+1. Table Format (default):
+```
+Snapshot Details:
+----------------------------------------------------------------------------------------------------
+Snapshot ID           Created              State      Progress   Size (GB)  Description
+----------------------------------------------------------------------------------------------------
+snap-1234567890abcdef0 2024-04-22 10:30:00 completed  100%       100        Daily backup
+snap-0987654321fedcba0 2024-04-21 10:30:00 completed  100%       100        Daily backup
+----------------------------------------------------------------------------------------------------
+Total snapshots: 2
+```
+
+2. JSON Format:
 ```json
-{
-  "resource": {
-    "type": "EBS",
-    "size_gb": 100,
-    "job": "daily"
-  },
-  "monthly_costs": [
-    {
-      "month": 1,
-      "cost": 5.25,
-      "breakdown": {
-        "daily": 5.25
-      }
-    },
-    // ... remaining months
-  ]
-}
+[
+  {
+    "SnapshotId": "snap-1234567890abcdef0",
+    "StartTime": "2024-04-22 10:30:00",
+    "State": "completed",
+    "Progress": "100%",
+    "VolumeSize": 100,
+    "Description": "Daily backup"
+  }
+]
+```
+
+#### How it Works
+1. Verifies the existence of the specified volume
+2. Retrieves all snapshots associated with the volume
+3. Formats the snapshot information
+4. Outputs the results in the requested format
+5. Provides detailed logging of the discovery process
+
+#### Logging
+The script provides detailed logging output showing:
+- Connection status
+- Volume verification
+- Snapshot discovery progress
+- Error conditions
+- Final results summary
+
+Example log output:
+```
+2024-04-22 20:15:30,123 - INFO - Connecting to EC2 in region: us-west-2
+2024-04-22 20:15:30,456 - INFO - Verifying volume vol-1234567890abcdef0 exists
+2024-04-22 20:15:30,789 - INFO - Found volume vol-1234567890abcdef0 with size 100GB
+2024-04-22 20:15:31,012 - INFO - Searching for snapshots of volume vol-1234567890abcdef0
+2024-04-22 20:15:31,345 - INFO - Found snapshot snap-1234567890abcdef0 created at 2024-04-22 10:30:00
+...
+2024-04-22 20:15:32,678 - INFO - Found 2 snapshots for volume vol-1234567890abcdef0
 ```
