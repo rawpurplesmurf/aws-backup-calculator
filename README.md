@@ -361,6 +361,40 @@ The API provides automatic interactive documentation:
 - Swagger UI: `http://127.0.0.1:8000/docs`
 - ReDoc: `http://127.0.0.1:8000/redoc`
 
+## Additional Tools
+
+### Snapshot Percentage Calculator
+
+The `snapshot_percentage.py` script calculates the actual storage percentage used by EBS snapshots compared to their source volumes. This is useful for understanding the real storage costs of your snapshots.
+
+#### Usage
+
+```bash
+python snapshot_percentage.py [--region REGION] SNAPSHOT_ID [SNAPSHOT_ID ...]
+```
+
+Example:
+```bash
+python snapshot_percentage.py snap-1234567890abcdef0 snap-0987654321fedcba0
+```
+
+Output format:
+```
+snap-1234567890abcdef0: 45.23% (12345 blocks, 6,321,254,400 bytes of 13,980,000,000 bytes)
+```
+
+#### Features
+- Calculates the percentage of source volume actually stored in the snapshot
+- Shows detailed block and byte counts
+- Supports multiple regions
+- Handles multiple snapshots in a single command
+
+#### How it Works
+1. Retrieves the source volume size from the snapshot metadata
+2. Counts the number of 512 KiB blocks actually stored in the snapshot
+3. Calculates the percentage of the source volume that is actually stored
+4. Provides detailed statistics about the snapshot's storage usage
+
 ## Response Format
 
 The API returns a JSON response with monthly cost projections for the next 12 months:
